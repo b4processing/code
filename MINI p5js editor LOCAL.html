@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>p5.js Code Editor</title>
+    
+    <!-- CodeMirror CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+    
+    <!-- CodeMirror JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+    
+    <!-- p5.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Monaco', 'Menlo', monospace;
+            background: #1e1e1e;
+            color: #ffffff;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+            gap: 1px;
+            background: #333;
+        }
+        
+        .header {
+            grid-column: 1 / -1;
+            background: #2d2d2d;
+            padding: 15px 20px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #61dafb;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .btn {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: #357abd;
+        }
+        
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .btn.stop {
+            background: #ff4757;
+        }
+        
+        .btn.stop:hover {
+            background: #c44569;
+        }
+        
+        .editor-panel {
+            background: #1e1e1e;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .canvas-panel {
+            background: #2d2d2d;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .canvas-container {
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 100%;
+            max-height: 100%;
+            overflow: hidden;
+        }
+        
+        .output-panel {
+            grid-column: 1 / -1;
+            background: #2d2d2d;
+            border-top: 1px solid #444;
+            max-height: 200px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .output-header {
+            padding: 10px 15px;
+            background: #3d3d3d;
+            border-bottom: 1px solid #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+        
+        .char-count {
+            color: #ffa502;
+            font-weight: bold;
+        }
+        
+        .char-count.over-limit {
+            color: #ff4757;
+        }
+        
+        .CodeMirror {
+            height: 100% !important;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        .output-code {
+            flex: 1;
+            padding: 15px;
+            background: #1e1e1e;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 11px;
+            line-height: 1.3;
+            overflow-y: auto;
+            color: #a0a0a0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .panel-title {
+            position: absolute;
+            top: 10px;
+            left: 15px;
+            font-size: 11px;
+            color: #888;
+            z-index: 10;
+            background: #1e1e1e;
+            padding: 2px 6px;
+            border-radius: 2px;
+        }
+        
+        .canvas-panel .panel-title {
+            background: #2d2d2d;
+        }
+        
+        .error-message {
+            position: absolute;
+            bottom: 10px;
+            left: 15px;
+            right: 15px;
+            background: #ff4757;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 20;
+            display: none;
+        }
+        
+        .canvas-info {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            font-size: 10px;
+            color: #888;
+            z-index: 10;
+        }
+
+        .copy-btn {
+            background: #5cb85c;
+            margin-left: 10px;
+        }
+        
+        .copy-btn:hover {
+            background: #449d44;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">p5.js Code Editor (Standalone)</div>
+            <div class="controls">
+                <button class="btn" id="runBtn">Run</button>
+                <button class="btn stop" id="stopBtn" disabled>Stop</button>
+                <button class="btn" id="saveBtn">Save Local</button>
+                <button class="btn" id="loadBtn">Load Local</button>
+            </div>
+        </div>
+        
+        <div class="editor-panel">
+            <div class="panel-title">Code Editor</div>
+            <textarea id="code-editor"></textarea>
+        </div>
+        
+        <div class="canvas-panel">
+            <div class="panel-title">Live Preview</div>
+            <div class="canvas-container" id="canvas-container">
+                <div style="color: #888; font-size: 14px;">Click "Run" to start preview</div>
+            </div>
+            <div class="error-message" id="error-message"></div>
+            <div class="canvas-info" id="canvas-info"></div>
+        </div>
+        
+        <div class="output-panel">
+            <div class="output-header">
+                <span>Minified Code for Twitter</span>
+                <div>
+                    <span class="char-count" id="char-count">0 / 280</span>
+                    <button class="btn copy-btn" id="copyBtn">Copy</button>
+                </div>
+            </div>
+            <div class="output-code" id="output-code">// Minified code will appear here...</div>
+        </div>
+    </div>
+
+    <script>
+        // Default p5.js sketch
+        const defaultSketch = `function setup() {
+  createCanvas(400, 400);
+  colorMode(HSB, 360, 100, 100);
+}
+
+function draw() {
+  background(220, 20, 95);
+  
+  // Rotating colorful circles
+  push();
+  translate(width/2, height/2);
+  rotate(frameCount * 0.02);
+  
+  for (let i = 0; i < 8; i++) {
+    push();
+    rotate(TWO_PI * i / 8);
+    translate(100, 0);
+    
+    fill(frameCount * 2 + i * 45, 80, 90);
+    noStroke();
+    ellipse(0, 0, 40 + sin(frameCount * 0.1) * 20);
+    pop();
+  }
+  pop();
+  
+  // Center circle
+  fill(0, 0, 100);
+  ellipse(width/2, height/2, 60);
+}`;
+
+        // Initialize CodeMirror
+        const editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
+            mode: 'javascript',
+            theme: 'monokai',
+            lineNumbers: true,
+            indentUnit: 2,
+            tabSize: 2,
+            indentWithTabs: false,
+            lineWrapping: true,
+            autoCloseBrackets: true,
+            matchBrackets: true
+        });
+
+        editor.setValue(defaultSketch);
+
+        // Global variables
+        let currentSketch = null;
+        let isRunning = false;
+
+        // DOM elements
+        const runBtn = document.getElementById('runBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const loadBtn = document.getElementById('loadBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const canvasContainer = document.getElementById('canvas-container');
+        const errorMessage = document.getElementById('error-message');
+        const canvasInfo = document.getElementById('canvas-info');
+        const outputCode = document.getElementById('output-code');
+        const charCount = document.getElementById('char-count');
+
+        // Minifier function
+        function minifyCode(code) {
+            return code
+                // Remove comments
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .replace(/\/\/.*$/gm, '')
+                // Remove extra whitespace
+                .replace(/\s+/g, ' ')
+                // Remove unnecessary spaces around operators and punctuation
+                .replace(/\s*([{}();,=+\-*/<>!&|])\s*/g, '$1')
+                // Remove spaces after keywords that don't need them
+                .replace(/\b(if|for|while|function|return)\s*\(/g, '$1(')
+                // Remove trailing/leading whitespace
+                .trim();
+        }
+
+        // Update minified output
+        function updateMinifiedOutput() {
+            const code = editor.getValue();
+            const minified = minifyCode(code);
+            const charLength = minified.length;
+            
+            outputCode.textContent = minified;
+            charCount.textContent = `${charLength} / 280`;
+            charCount.classList.toggle('over-limit', charLength > 280);
+        }
+
+        // Copy minified code to clipboard
+        function copyMinifiedCode() {
+            const code = outputCode.textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                }, 1000);
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = code;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                }, 1000);
+            });
+        }
+
+        // Error handling
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        // Run sketch with direct p5.js execution
+        function runSketch() {
+            if (isRunning) return;
+            
+            try {
+                // Clear previous sketch
+                stopSketch();
+                
+                // Clear canvas container
+                canvasContainer.innerHTML = '';
+                
+                const code = editor.getValue();
+                
+                // Execute code directly in global p5 context
+                currentSketch = new p5(function(p) {
+                    // Execute the user code in the p5 context
+                    with (p) {
+                        eval(code);
+                    }
+                }, canvasContainer);
+                
+                isRunning = true;
+                runBtn.disabled = true;
+                stopBtn.disabled = false;
+                
+                // Update canvas info
+                setTimeout(() => {
+                    const canvas = canvasContainer.querySelector('canvas');
+                    if (canvas) {
+                        canvasInfo.textContent = `${canvas.width} × ${canvas.height}`;
+                    } else {
+                        showError('No canvas created. Make sure your code includes createCanvas().');
+                    }
+                }, 200);
+                
+            } catch (error) {
+                console.error('Sketch error:', error);
+                showError(`Runtime Error: ${error.message}`);
+                stopSketch();
+            }
+        }
+
+        // Stop sketch
+        function stopSketch() {
+            if (currentSketch) {
+                currentSketch.remove();
+                currentSketch = null;
+            }
+            
+            isRunning = false;
+            runBtn.disabled = false;
+            stopBtn.disabled = true;
+            canvasContainer.innerHTML = '<div style="color: #888; font-size: 14px;">Click "Run" to start preview</div>';
+            canvasInfo.textContent = '';
+        }
+
+        // LocalStorage functions
+        function saveCode() {
+            try {
+                localStorage.setItem('p5js-editor-code', editor.getValue());
+                const originalText = saveBtn.textContent;
+                saveBtn.textContent = 'Saved!';
+                setTimeout(() => {
+                    saveBtn.textContent = originalText;
+                }, 1000);
+            } catch (e) {
+                showError('Could not save to localStorage');
+            }
+        }
+
+        function loadCode() {
+            try {
+                const savedCode = localStorage.getItem('p5js-editor-code');
+                if (savedCode) {
+                    editor.setValue(savedCode);
+                    updateMinifiedOutput();
+                    const originalText = loadBtn.textContent;
+                    loadBtn.textContent = 'Loaded!';
+                    setTimeout(() => {
+                        loadBtn.textContent = originalText;
+                    }, 1000);
+                } else {
+                    showError('No saved code found');
+                }
+            } catch (e) {
+                showError('Could not load from localStorage');
+            }
+        }
+
+        // Event listeners
+        runBtn.addEventListener('click', runSketch);
+        stopBtn.addEventListener('click', stopSketch);
+        saveBtn.addEventListener('click', saveCode);
+        loadBtn.addEventListener('click', loadCode);
+        copyBtn.addEventListener('click', copyMinifiedCode);
+
+        // Update minified output when code changes
+        editor.on('change', updateMinifiedOutput);
+
+        // Initialize
+        updateMinifiedOutput();
+
+        // Keyboard shortcuts
+        editor.setOption('extraKeys', {
+            'Ctrl-Enter': runSketch,
+            'Cmd-Enter': runSketch,
+            'Ctrl-S': (cm) => {
+                saveCode();
+                return false;
+            },
+            'Cmd-S': (cm) => {
+                saveCode();
+                return false;
+            }
+        });
+
+        // Handle window errors
+        window.addEventListener('error', (event) => {
+            if (isRunning) {
+                showError(`Error: ${event.message}`);
+                stopSketch();
+            }
+        });
+
+        // Auto-run on page load if there's code
+        window.addEventListener('load', () => {
+            if (editor.getValue().trim()) {
+                setTimeout(runSketch, 500);
+            }
+        });
+    </script>
+</body>
+</html>
